@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block titulo %}Início{% endblock %}
+
+{% block conteudo %}
+<section class="cartao inicio">
+    <h1>Bem-vindo ao Lojão do Campinho!</h1>
+    <p>Controle o estoque da loja de forma simples: cadastre produtos e registre entradas e saídas.</p>
+
+    <p class="total-produtos">
+        Produtos cadastrados: <strong>{{ total_produtos }}</strong>
+    </p>
+
+    <a class="botao botao-principal" href="{% url 'estoque:gerenciar' %}">Gerenciar Estoque</a>
+</section>
+{% endblock %}

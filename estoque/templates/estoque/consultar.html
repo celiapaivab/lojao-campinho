@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block titulo %}Consultar Estoque{% endblock %}
+
+{% block conteudo %}
+<section class="cartao">
+    <h1>Consultar Estoque</h1>
+
+    {% if produtos %}
+        <div class="tabela-container">
+            <table class="tabela">
+                <thead>
+                    <tr>
+                        <th>Produto</th>
+                        <th>Preço</th>
+                        <th>Quantidade</th>
+                        <th>Situação do Estoque</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for produto in produtos %}
+                        <tr {% if produto.estoque_baixo %}class="linha-baixo"{% endif %}>
+                            <td>{{ produto.nome }}</td>
+                            <td class="preco">R$ {{ produto.preco }}</td>
+                            <td>{{ produto.quantidade_estoque }}</td>
+                            <td>
+                                {% if produto.estoque_baixo %}
+                                    <span class="situacao situacao-baixo">Estoque baixo</span>
+                                {% else %}
+                                    <span class="situacao situacao-ok">Em estoque</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="vazio">Nenhum produto cadastrado ainda.</p>
+    {% endif %}
+</section>
+{% endblock %}

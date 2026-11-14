@@ -1,0 +1,33 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Início{% endblock %} | Lojão do Campinho</title>
+    <link rel="stylesheet" href="{% static 'estoque/css/estilo.css' %}">
+</head>
+<body>
+    {% with pagina=request.resolver_match.url_name %}
+    <header class="topo">
+        <nav class="navegacao">
+            <a class="marca" href="{% url 'estoque:inicio' %}">Lojão do Campinho</a>
+            <ul>
+                <li><a href="{% url 'estoque:inicio' %}" {% if pagina == 'inicio' %}class="ativo" aria-current="page"{% endif %}>Início</a></li>
+                <li><a href="{% url 'estoque:gerenciar' %}" {% if pagina == 'gerenciar' %}class="ativo" aria-current="page"{% endif %}>Gerenciar Estoque</a></li>
+                <li><a href="{% url 'estoque:consultar' %}" {% if pagina == 'consultar' %}class="ativo" aria-current="page"{% endif %}>Consultar Estoque</a></li>
+            </ul>
+        </nav>
+    </header>
+    {% endwith %}
+
+    <main class="conteudo">
+        {% if messages %}
+            {% for mensagem in messages %}
+                <p class="mensagem mensagem-{{ mensagem.tags }}">{{ mensagem }}</p>
+            {% endfor %}
+        {% endif %}
+
+        {% block conteudo %}{% endblock %}
+    </main>
+</body>
+</html>
