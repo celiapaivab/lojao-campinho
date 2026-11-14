@@ -94,6 +94,30 @@ Para parar o servidor, pressione `Ctrl + C` no terminal.
 python manage.py test
 ```
 
+## Integração contínua (GitHub Actions)
+
+**Integração contínua** (CI, do inglês *Continuous Integration*) significa
+verificar o projeto automaticamente a cada alteração enviada ao GitHub. Assim,
+um erro é descoberto logo, antes de chegar à versão principal.
+
+O arquivo `.github/workflows/django-tests.yml` define essa verificação.
+Ela roda automaticamente:
+
+- a cada `push` na branch `main`;
+- a cada Pull Request aberto ou atualizado para a branch `main`.
+
+Em uma máquina Linux do GitHub, com Python 3.12 e banco SQLite, ela:
+
+1. instala as dependências do `requirements.txt`;
+2. roda `python manage.py check` (verifica a configuração do Django);
+3. roda `python manage.py makemigrations --check --dry-run` (confere se não falta nenhuma migração);
+4. roda `python manage.py test` (executa todos os testes automatizados).
+
+Para ver os resultados, abra o repositório no GitHub e clique na aba
+**Actions**. Cada execução aparece com um ✅ (tudo certo) ou ❌ (algo falhou);
+clique nela para ver os detalhes de cada passo. Nos Pull Requests, o resultado
+também aparece no final da página, na área de verificações (*checks*).
+
 ## Segurança
 
 - Todas as telas exigem login. Quem não está logado é levado à tela de login.
