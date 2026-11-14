@@ -1,10 +1,11 @@
 from decimal import Decimal
 from unittest import mock
 
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import MovimentacaoEstoque, Produto
@@ -12,6 +13,18 @@ from .services import cadastrar_produto, registrar_movimentacao
 
 ENTRADA = MovimentacaoEstoque.Tipo.ENTRADA
 SAIDA = MovimentacaoEstoque.Tipo.SAIDA
+
+# Usuário e senha usados apenas no banco temporário dos testes.
+USUARIO_TESTE = 'dono_teste'
+SENHA_TESTE = 'senha-so-para-testes-123'
+
+
+class TesteComUsuarioLogado(TestCase):
+    """Base para testes das telas: cria um usuário e já faz o login."""
+
+    def setUp(self):
+        self.usuario = User.objects.create_user(username=USUARIO_TESTE, password=SENHA_TESTE)
+        self.client.force_login(self.usuario)
 
 
 class ProdutoTests(TestCase):
@@ -237,7 +250,7 @@ class RegistrarMovimentacaoTests(TestCase):
         self.assertEqual(self.produto.movimentacoes.count(), 5)
 
 
-class PaginaInicialTests(TestCase):
+class PaginaInicialTests(TesteComUsuarioLogado):
     def test_pagina_inicial_carrega(self):
         resposta = self.client.get(reverse('estoque:inicio'))
         self.assertEqual(resposta.status_code, 200)
@@ -264,8 +277,9 @@ class PaginaInicialTests(TestCase):
                     self.assertEqual(self.client.get(reverse(destino)).status_code, 200)
 
 
-class GerenciarEstoqueTests(TestCase):
+class GerenciarEstoqueTests(TesteComUsuarioLogado):
     def setUp(self):
+        super().setUp()
         self.url = reverse('estoque:gerenciar')
         self.produto = cadastrar_produto(
             nome='Caderno', categoria='Cadernos', preco=Decimal('15.00'), quantidade_estoque=10
@@ -359,7 +373,7 @@ class GerenciarEstoqueTests(TestCase):
         self.assertFalse(MovimentacaoEstoque.objects.exists())
 
 
-class ConsultarEstoqueTests(TestCase):
+class ConsultarEstoqueTests(TesteComUsuarioLogado):
     def test_sem_produtos_mostra_mensagem(self):
         resposta = self.client.get(reverse('estoque:consultar'))
         self.assertEqual(resposta.status_code, 200)
@@ -407,3 +421,160 @@ class EstoqueBaixoTests(TestCase):
             with self.subTest(quantidade=quantidade):
                 produto.quantidade_estoque = quantidade
                 self.assertEqual(produto.estoque_baixo, esperado)
+
+
+class AutenticacaoTests(TestCase):
+    PAGINAS = ['estoque:inicio', 'estoque:gerenciar', 'estoque:consultar']
+
+    def setUp(self):
+        self.usuario = User.objects.create_user(username=USUARIO_TESTE, password=SENHA_TESTE)
+        self.url_login = reverse('login')
+        self.url_logout = reverse('logout')
+
+    def fazer_login(self, senha=SENHA_TESTE, **extras):
+        return self.client.post(
+            self.url_login, {'username': USUARIO_TESTE, 'password': senha, **extras}
+        )
+
+    def esta_logado(self):
+        return '_auth_user_id' in self.client.session
+
+    def test_visitante_e_redirecionado_para_login(self):
+        for pagina in self.PAGINAS:
+            with self.subTest(pagina=pagina):
+                url = reverse(pagina)
+                resposta = self.client.get(url)
+                self.assertRedirects(resposta, f'{self.url_login}?next={url}')
+
+    def test_visitante_nao_consegue_cadastrar_produto(self):
+        resposta = self.client.post(reverse('estoque:gerenciar'), {
+            'acao': 'cadastrar', 'nome': 'Cola', 'categoria': 'X',
+            'preco': '1,00', 'quantidade_estoque': '1',
+        })
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Produto.objects.exists())
+
+    def test_pagina_de_login(self):
+        resposta = self.client.get(self.url_login)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Usuário')
+        self.assertContains(resposta, 'Senha')
+        self.assertContains(resposta, '<button type="submit" class="botao botao-principal">Entrar</button>', html=True)
+        self.assertContains(resposta, 'csrfmiddlewaretoken')
+        # Sem login, a barra mostra só o nome da loja (sem links nem "Sair").
+        self.assertNotContains(resposta, 'Gerenciar Estoque')
+        self.assertNotContains(resposta, 'Sair')
+
+    def test_login_valido_redireciona_para_inicio(self):
+        resposta = self.fazer_login()
+        self.assertRedirects(resposta, reverse('estoque:inicio'))
+        self.assertTrue(self.esta_logado())
+
+    def test_login_valido_volta_para_pagina_pedida(self):
+        destino = reverse('estoque:consultar')
+        resposta = self.fazer_login(next=destino)
+        self.assertRedirects(resposta, destino)
+
+    def test_login_invalido_falha(self):
+        resposta = self.fazer_login(senha='senha-errada')
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'entre com um usuário')
+        self.assertFalse(self.esta_logado())
+
+        resposta = self.client.post(self.url_login, {'username': '', 'password': ''})
+        self.assertContains(resposta, 'Este campo é obrigatório.', count=2)
+        self.assertFalse(self.esta_logado())
+
+    def test_usuario_logado_acessa_as_tres_paginas(self):
+        self.fazer_login()
+        for pagina in self.PAGINAS:
+            with self.subTest(pagina=pagina):
+                resposta = self.client.get(reverse(pagina))
+                self.assertEqual(resposta.status_code, 200)
+                self.assertContains(resposta, 'Sair')
+
+    def test_usuario_logado_ao_abrir_login_vai_para_inicio(self):
+        self.fazer_login()
+        resposta = self.client.get(self.url_login)
+        self.assertRedirects(resposta, reverse('estoque:inicio'))
+
+    def test_usuario_logado_cadastra_produto_e_movimenta_estoque(self):
+        self.fazer_login()
+        url = reverse('estoque:gerenciar')
+        self.client.post(url, {
+            'acao': 'cadastrar', 'nome': 'Estojo', 'categoria': 'Acessórios',
+            'preco': '19,90', 'quantidade_estoque': '7',
+        })
+        produto = Produto.objects.get(nome='Estojo')
+        self.client.post(url, {
+            'acao': 'movimentar', 'produto': produto.pk, 'tipo': 'SAIDA', 'quantidade': '3',
+        })
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade_estoque, 4)
+        self.assertEqual(produto.movimentacoes.count(), 1)
+
+    def test_logout_encerra_a_sessao(self):
+        self.fazer_login()
+        resposta = self.client.post(self.url_logout)
+        self.assertRedirects(resposta, self.url_login)
+        self.assertFalse(self.esta_logado())
+
+    def test_paginas_bloqueadas_depois_do_logout(self):
+        self.fazer_login()
+        self.client.post(self.url_logout)
+        for pagina in self.PAGINAS:
+            with self.subTest(pagina=pagina):
+                url = reverse(pagina)
+                self.assertRedirects(self.client.get(url), f'{self.url_login}?next={url}')
+
+    def test_get_no_logout_nao_desloga(self):
+        self.fazer_login()
+        resposta = self.client.get(self.url_logout)
+        self.assertEqual(resposta.status_code, 405)  # Método não permitido
+        self.assertTrue(self.esta_logado())
+        self.assertEqual(self.client.get(reverse('estoque:inicio')).status_code, 200)
+
+    def test_senha_guardada_com_hash(self):
+        self.assertNotEqual(self.usuario.password, SENHA_TESTE)
+        self.assertTrue(self.usuario.password.startswith('pbkdf2_sha256$'))
+        self.assertTrue(self.usuario.check_password(SENHA_TESTE))
+
+
+class ProtecaoCsrfTests(TestCase):
+    """Com a verificação de CSRF ligada, POST sem token é recusado (403)."""
+
+    def setUp(self):
+        self.usuario = User.objects.create_user(username=USUARIO_TESTE, password=SENHA_TESTE)
+        self.client = Client(enforce_csrf_checks=True)
+
+    def test_login_sem_token_e_recusado(self):
+        resposta = self.client.post(
+            reverse('login'), {'username': USUARIO_TESTE, 'password': SENHA_TESTE}
+        )
+        self.assertEqual(resposta.status_code, 403)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_formularios_sem_token_sao_recusados(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.post(reverse('estoque:gerenciar'), {
+            'acao': 'cadastrar', 'nome': 'Cola', 'categoria': 'X',
+            'preco': '1,00', 'quantidade_estoque': '1',
+        })
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(Produto.objects.exists())
+
+        resposta = self.client.post(reverse('logout'))
+        self.assertEqual(resposta.status_code, 403)
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_formulario_com_token_e_aceito(self):
+        self.client.force_login(self.usuario)
+        url = reverse('estoque:gerenciar')
+        self.client.get(url)  # A página entrega o cookie com o token CSRF.
+        token = self.client.cookies['csrftoken'].value
+        resposta = self.client.post(url, {
+            'csrfmiddlewaretoken': token, 'acao': 'cadastrar', 'nome': 'Cola',
+            'categoria': 'X', 'preco': '1,00', 'quantidade_estoque': '1',
+        })
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(Produto.objects.filter(nome='Cola').exists())

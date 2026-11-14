@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block titulo %}Entrar{% endblock %}
+
+{% block conteudo %}
+<section class="cartao login">
+    <h1>Entrar</h1>
+    <p>Informe seu usuário e senha para acessar o controle de estoque.</p>
+
+    {% if next and not user.is_authenticated %}
+        <p class="mensagem mensagem-info">Faça login para acessar esta página.</p>
+    {% endif %}
+
+    <form method="post" class="formulario" novalidate>
+        {% csrf_token %}
+        {{ form }}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="acoes">
+            <button type="submit" class="botao botao-principal">Entrar</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

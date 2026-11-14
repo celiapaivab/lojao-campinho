@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -29,9 +31,13 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Desenvolvimento: DEBUG fica ligado por padrão.
+# Produção: defina DJANGO_DEBUG=False e DJANGO_ALLOWED_HOSTS (ex.: "loja.com.br").
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if host
+]
 
 
 # Application definition
@@ -125,6 +131,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Autenticação (sistema de login padrão do Django)
+LOGIN_URL = 'login'                     # Para onde vai quem não está logado
+LOGIN_REDIRECT_URL = 'estoque:inicio'   # Para onde vai após o login
+LOGOUT_REDIRECT_URL = 'login'           # Para onde vai após sair
+
+
+# Configurações extras de segurança, usadas apenas em produção (DEBUG=False).
+if not DEBUG:
+    if SECRET_KEY.startswith('django-insecure'):
+        raise ImproperlyConfigured(
+            'Defina a variável de ambiente DJANGO_SECRET_KEY em produção.'
+        )
+    SESSION_COOKIE_SECURE = True  # Cookie de sessão enviado só por HTTPS
+    CSRF_COOKIE_SECURE = True     # Cookie CSRF enviado só por HTTPS
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -11,11 +11,20 @@
     <header class="topo">
         <nav class="navegacao">
             <a class="marca" href="{% url 'estoque:inicio' %}">Lojão do Campinho</a>
+            {% if user.is_authenticated %}
             <ul>
                 <li><a href="{% url 'estoque:inicio' %}" {% if pagina == 'inicio' %}class="ativo" aria-current="page"{% endif %}>Início</a></li>
                 <li><a href="{% url 'estoque:gerenciar' %}" {% if pagina == 'gerenciar' %}class="ativo" aria-current="page"{% endif %}>Gerenciar Estoque</a></li>
                 <li><a href="{% url 'estoque:consultar' %}" {% if pagina == 'consultar' %}class="ativo" aria-current="page"{% endif %}>Consultar Estoque</a></li>
+                <li>
+                    {# Logout precisa ser POST (com token CSRF), não um link comum. #}
+                    <form method="post" action="{% url 'logout' %}" class="form-sair">
+                        {% csrf_token %}
+                        <button type="submit" class="botao-sair">Sair</button>
+                    </form>
+                </li>
             </ul>
+            {% endif %}
         </nav>
     </header>
     {% endwith %}

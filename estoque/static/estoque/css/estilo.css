@@ -77,6 +77,26 @@ body {
     font-weight: bold;
 }
 
+/* Botão "Sair" (formulário POST) com aparência de link do menu */
+.form-sair {
+    margin: 0;
+}
+
+.botao-sair {
+    display: block;
+    padding: 6px 12px;
+    border: 1px solid var(--lilas-borda);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--roxo);
+    font: inherit;
+    cursor: pointer;
+}
+
+.botao-sair:hover {
+    background: var(--lilas-claro);
+}
+
 /* Conteúdo */
 .conteudo {
     max-width: 960px;
@@ -95,6 +115,12 @@ h1 {
     margin-top: 0;
     font-size: 1.6rem;
     color: var(--roxo-escuro);
+}
+
+/* Página de login */
+.login {
+    max-width: 420px;
+    margin: 0 auto;
 }
 
 /* Página inicial */
@@ -228,6 +254,11 @@ h1 {
 .mensagem-success {
     background: var(--verde-claro);
     color: var(--verde);
+}
+
+.mensagem-info {
+    background: var(--lilas-claro);
+    color: var(--roxo-escuro);
 }
 
 .mensagem-error {
