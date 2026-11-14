@@ -6,6 +6,13 @@
 <section class="cartao">
     <h1>Consultar Estoque</h1>
 
+    {% if existem_produtos %}
+        <nav class="seletor" aria-label="Filtrar produtos">
+            <a href="{% url 'estoque:consultar' %}" {% if not somente_estoque_baixo %}class="ativo" aria-current="true"{% endif %}>Todos os produtos</a>
+            <a href="?filtro=baixo" {% if somente_estoque_baixo %}class="ativo" aria-current="true"{% endif %}>Somente estoque baixo</a>
+        </nav>
+    {% endif %}
+
     {% if produtos %}
         <div class="tabela-container">
             <table class="tabela">
@@ -35,6 +42,8 @@
                 </tbody>
             </table>
         </div>
+    {% elif somente_estoque_baixo %}
+        <p class="vazio">Nenhum produto com estoque baixo.</p>
     {% else %}
         <p class="vazio">Nenhum produto cadastrado ainda.</p>
     {% endif %}
