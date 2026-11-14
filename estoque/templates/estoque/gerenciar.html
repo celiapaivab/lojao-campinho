@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block titulo %}Gerenciar Estoque{% endblock %}
+
+{% block conteudo %}
+<section class="cartao">
+    <h1>Gerenciar Estoque</h1>
+
+    <nav class="seletor" aria-label="Escolha a operação">
+        <a href="?acao=cadastrar" {% if acao == 'cadastrar' %}class="ativo" aria-current="true"{% endif %}>Cadastrar produto</a>
+        <a href="?acao=movimentar" {% if acao == 'movimentar' %}class="ativo" aria-current="true"{% endif %}>Movimentar estoque</a>
+    </nav>
+
+    {% if acao == 'cadastrar' %}
+        <form method="post" class="formulario" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="cadastrar">
+            {{ form_produto }}
+            <div class="acoes">
+                <button type="submit" class="botao botao-principal">Salvar</button>
+                <a href="{% url 'estoque:inicio' %}" class="botao botao-secundario">Cancelar</a>
+            </div>
+        </form>
+    {% else %}
+        <form method="post" class="formulario" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="movimentar">
+            {{ form_movimentacao }}
+            <div class="acoes">
+                <button type="submit" class="botao botao-principal">Salvar</button>
+                <a href="{% url 'estoque:inicio' %}" class="botao botao-secundario">Cancelar</a>
+            </div>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

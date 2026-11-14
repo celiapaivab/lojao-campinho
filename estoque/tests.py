@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.urls import reverse
 
 from .models import MovimentacaoEstoque, Produto
 from .services import cadastrar_produto, registrar_movimentacao
@@ -234,3 +235,175 @@ class RegistrarMovimentacaoTests(TestCase):
 
         self.assertEqual(self.estoque_no_banco(), 0)
         self.assertEqual(self.produto.movimentacoes.count(), 5)
+
+
+class PaginaInicialTests(TestCase):
+    def test_pagina_inicial_carrega(self):
+        resposta = self.client.get(reverse('estoque:inicio'))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, 'estoque/inicio.html')
+        self.assertContains(resposta, 'Bem-vindo')
+        self.assertContains(resposta, f'href="{reverse("estoque:gerenciar")}"')
+
+    def test_mostra_total_de_produtos(self):
+        cadastrar_produto(nome='Caneta', categoria='Escrita', preco=Decimal('2.00'))
+        cadastrar_produto(nome='Lápis', categoria='Escrita', preco=Decimal('1.00'))
+        resposta = self.client.get(reverse('estoque:inicio'))
+        self.assertEqual(resposta.context['total_produtos'], 2)
+        self.assertContains(resposta, 'Produtos cadastrados: <strong>2</strong>', html=True)
+
+    def test_navegacao_presente_e_links_funcionam(self):
+        paginas = ['estoque:inicio', 'estoque:gerenciar', 'estoque:consultar']
+        for pagina in paginas:
+            with self.subTest(pagina=pagina):
+                resposta = self.client.get(reverse(pagina))
+                self.assertEqual(resposta.status_code, 200)
+                self.assertContains(resposta, 'Lojão do Campinho')
+                for destino in paginas:
+                    self.assertContains(resposta, f'href="{reverse(destino)}"')
+                    self.assertEqual(self.client.get(reverse(destino)).status_code, 200)
+
+
+class GerenciarEstoqueTests(TestCase):
+    def setUp(self):
+        self.url = reverse('estoque:gerenciar')
+        self.produto = cadastrar_produto(
+            nome='Caderno', categoria='Cadernos', preco=Decimal('15.00'), quantidade_estoque=10
+        )
+
+    def estoque_no_banco(self):
+        return Produto.objects.get(pk=self.produto.pk).quantidade_estoque
+
+    def movimentar(self, tipo, quantidade, produto=None):
+        return self.client.post(self.url, {
+            'acao': 'movimentar',
+            'produto': (produto or self.produto).pk,
+            'tipo': tipo,
+            'quantidade': quantidade,
+            'observacao': '',
+        }, follow=True)
+
+    def test_pagina_carrega_com_as_duas_operacoes(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Cadastrar produto')
+        self.assertContains(resposta, 'Movimentar estoque')
+        self.assertContains(resposta, 'Salvar')
+        self.assertContains(resposta, 'Cancelar')
+        resposta = self.client.get(self.url + '?acao=movimentar')
+        self.assertContains(resposta, 'Tipo de movimentação')
+
+    def test_cadastra_produto_pelo_formulario(self):
+        resposta = self.client.post(self.url, {
+            'acao': 'cadastrar', 'nome': 'Mochila', 'categoria': 'Acessórios',
+            'preco': '89,90', 'quantidade_estoque': '3',
+        }, follow=True)
+        self.assertRedirects(resposta, self.url)
+        produto = Produto.objects.get(nome='Mochila')
+        self.assertEqual(produto.preco, Decimal('89.90'))
+        self.assertEqual(produto.quantidade_estoque, 3)
+        self.assertContains(resposta, 'Produto &quot;Mochila&quot; cadastrado com sucesso.')
+
+    def test_cadastro_invalido_nao_salva(self):
+        dados_invalidos = [
+            {'nome': '', 'categoria': 'X', 'preco': '1,00', 'quantidade_estoque': '1'},
+            {'nome': '   ', 'categoria': 'X', 'preco': '1,00', 'quantidade_estoque': '1'},
+            {'nome': 'Cola', 'categoria': 'X', 'preco': '-1,00', 'quantidade_estoque': '1'},
+            {'nome': 'Cola', 'categoria': 'X', 'preco': '1,00', 'quantidade_estoque': '-1'},
+            {'nome': 'Cola', 'categoria': 'X', 'preco': 'abc', 'quantidade_estoque': '1'},
+        ]
+        for dados in dados_invalidos:
+            with self.subTest(dados=dados):
+                resposta = self.client.post(self.url, {'acao': 'cadastrar', **dados})
+                self.assertEqual(resposta.status_code, 200)
+                self.assertTrue(resposta.context['form_produto'].errors)
+        self.assertEqual(Produto.objects.count(), 1)
+
+    def test_entrada_pelo_formulario(self):
+        resposta = self.movimentar('ENTRADA', 5)
+        self.assertRedirects(resposta, self.url + '?acao=movimentar')
+        self.assertEqual(self.estoque_no_banco(), 15)
+        self.assertContains(resposta, 'Estoque atual: 15.')
+        self.assertEqual(MovimentacaoEstoque.objects.count(), 1)
+
+    def test_saida_pelo_formulario(self):
+        resposta = self.movimentar('SAIDA', 4)
+        self.assertRedirects(resposta, self.url + '?acao=movimentar')
+        self.assertEqual(self.estoque_no_banco(), 6)
+        self.assertContains(resposta, 'Estoque atual: 6.')
+
+    def test_saida_maior_que_estoque_e_rejeitada(self):
+        resposta = self.movimentar('SAIDA', 11)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Estoque insuficiente para esta saída.')
+        self.assertEqual(self.estoque_no_banco(), 10)
+        self.assertFalse(MovimentacaoEstoque.objects.exists())
+
+    def test_movimentacao_invalida_nao_altera_estoque(self):
+        casos = [
+            {'tipo': 'ENTRADA', 'quantidade': 0},
+            {'tipo': 'SAIDA', 'quantidade': -2},
+            {'tipo': 'TROCA', 'quantidade': 1},
+            {'tipo': 'ENTRADA', 'quantidade': ''},
+        ]
+        for caso in casos:
+            with self.subTest(caso=caso):
+                resposta = self.movimentar(**caso)
+                self.assertEqual(resposta.status_code, 200)
+                self.assertTrue(resposta.context['form_movimentacao'].errors)
+        resposta = self.client.post(self.url, {
+            'acao': 'movimentar', 'produto': '9999', 'tipo': 'ENTRADA', 'quantidade': 1,
+        })
+        self.assertTrue(resposta.context['form_movimentacao'].errors)
+        self.assertEqual(self.estoque_no_banco(), 10)
+        self.assertFalse(MovimentacaoEstoque.objects.exists())
+
+
+class ConsultarEstoqueTests(TestCase):
+    def test_sem_produtos_mostra_mensagem(self):
+        resposta = self.client.get(reverse('estoque:consultar'))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Nenhum produto cadastrado ainda.')
+        self.assertNotContains(resposta, '<table')
+
+    def test_mostra_valores_e_situacao_do_estoque(self):
+        cadastrar_produto(nome='Apontador', categoria='Escrita', preco=Decimal('3.50'), quantidade_estoque=5)
+        cadastrar_produto(nome='Borracha', categoria='Escrita', preco=Decimal('2.00'), quantidade_estoque=6)
+        cadastrar_produto(nome='Cola', categoria='Escrita', preco=Decimal('4.25'), quantidade_estoque=0)
+
+        resposta = self.client.get(reverse('estoque:consultar'))
+        self.assertEqual(resposta.status_code, 200)
+        for coluna in ['Produto', 'Preço', 'Quantidade', 'Situação do Estoque']:
+            self.assertContains(resposta, f'<th>{coluna}</th>', html=True)
+
+        self.assertContains(resposta, '<td class="preco">R$ 3,50</td>', html=True)
+        self.assertContains(resposta, '<td class="preco">R$ 2,00</td>', html=True)
+        self.assertContains(resposta, '<td class="preco">R$ 4,25</td>', html=True)
+        # 5 e 0 unidades: estoque baixo. 6 unidades: em estoque.
+        self.assertContains(resposta, 'Estoque baixo', count=2)
+        self.assertContains(resposta, 'Em estoque', count=1)
+
+        conteudo = resposta.content.decode()
+        linha_apontador = conteudo.split('Apontador')[1].split('</tr>')[0]
+        linha_borracha = conteudo.split('Borracha')[1].split('</tr>')[0]
+        self.assertIn('<td>5</td>', linha_apontador)
+        self.assertIn('Estoque baixo', linha_apontador)
+        self.assertIn('<td>6</td>', linha_borracha)
+        self.assertIn('Em estoque', linha_borracha)
+
+    def test_consulta_reflete_movimentacoes(self):
+        produto = cadastrar_produto(nome='Tesoura', categoria='Escritório', preco=Decimal('9.90'), quantidade_estoque=8)
+        registrar_movimentacao(produto, SAIDA, 3)
+        resposta = self.client.get(reverse('estoque:consultar'))
+        linha = resposta.content.decode().split('Tesoura')[1].split('</tr>')[0]
+        self.assertIn('<td>5</td>', linha)
+        self.assertIn('Estoque baixo', linha)
+
+
+class EstoqueBaixoTests(TestCase):
+    def test_limite_de_estoque_baixo(self):
+        produto = Produto(nome='Giz', categoria='Escrita', preco=Decimal('1.00'))
+        for quantidade, esperado in [(0, True), (5, True), (6, False), (50, False)]:
+            with self.subTest(quantidade=quantidade):
+                produto.quantidade_estoque = quantidade
+                self.assertEqual(produto.estoque_baixo, esperado)

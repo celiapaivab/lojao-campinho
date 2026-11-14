@@ -61,8 +61,15 @@ class Produto(models.Model):
             ),
         ]
 
+    # Produtos com esta quantidade ou menos aparecem como "Estoque baixo".
+    LIMITE_ESTOQUE_BAIXO = 5
+
     def __str__(self):
         return self.nome
+
+    @property
+    def estoque_baixo(self):
+        return self.quantidade_estoque <= self.LIMITE_ESTOQUE_BAIXO
 
     def clean(self):
         # Remove espaços extras no início e no fim dos textos.
