@@ -62,16 +62,58 @@ pip install -r requirements.txt
 python manage.py migrate
 ```
 
-### 5. Iniciar o servidor de desenvolvimento
+### 5. Criar a conta do dono da loja (apenas na primeira vez)
+
+O sistema não tem cadastro público de usuários. A conta de acesso é criada
+pelo terminal:
+
+```bash
+python manage.py createsuperuser
+```
+
+O comando pede um nome de usuário, um e-mail (opcional) e uma senha.
+A senha não aparece enquanto é digitada e é guardada de forma criptografada
+(hash) pelo Django. Nunca escreva usuários ou senhas no código do projeto.
+
+Outras contas podem ser criadas depois, pelo painel administrativo em
+<http://127.0.0.1:8000/admin/>.
+
+### 6. Iniciar o servidor de desenvolvimento
 
 ```bash
 python manage.py runserver
 ```
 
-Depois, acesse <http://127.0.0.1:8000/> no navegador.
+Depois, acesse <http://127.0.0.1:8000/> no navegador e entre com o usuário
+criado no passo 5. Para sair, use o botão **Sair** na barra de navegação.
 Para parar o servidor, pressione `Ctrl + C` no terminal.
 
-## Observação sobre a chave secreta
+### 7. Rodar os testes automatizados
 
-A `SECRET_KEY` presente em `settings.py` serve apenas para desenvolvimento local.
-Em qualquer outro ambiente, defina a variável de ambiente `DJANGO_SECRET_KEY`.
+```bash
+python manage.py test
+```
+
+## Segurança
+
+- Todas as telas exigem login. Quem não está logado é levado à tela de login.
+- O login e o logout usam o sistema de autenticação padrão do Django (sessões).
+- Todos os formulários enviados por POST usam proteção CSRF (`{% csrf_token %}`).
+- O botão **Sair** envia um POST com token CSRF; um simples acesso (GET) não desloga.
+
+### Desenvolvimento x produção
+
+As configurações padrão de `settings.py` são para **desenvolvimento local**.
+A `SECRET_KEY` presente no código serve apenas para isso.
+
+Em produção, defina estas variáveis de ambiente:
+
+| Variável | Exemplo | Para que serve |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | uma chave longa e aleatória | Chave secreta (obrigatória quando `DJANGO_DEBUG=False`) |
+| `DJANGO_DEBUG` | `False` | Desliga o modo de depuração |
+| `DJANGO_ALLOWED_HOSTS` | `loja.com.br` | Endereços em que o site pode ser acessado |
+
+Com `DJANGO_DEBUG=False`, os cookies de sessão e CSRF passam a ser enviados
+apenas por HTTPS. Antes de publicar, rode `python manage.py check --deploy`
+para ver as recomendações de segurança do Django.

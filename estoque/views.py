@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
@@ -7,11 +8,13 @@ from .models import Produto
 from .services import cadastrar_produto, registrar_movimentacao
 
 
+@login_required
 def inicio(request):
     contexto = {'total_produtos': Produto.objects.count()}
     return render(request, 'estoque/inicio.html', contexto)
 
 
+@login_required
 def gerenciar_estoque(request):
     # A tela tem duas operações: "cadastrar" um produto ou "movimentar" o estoque.
     acao = request.POST.get('acao') or request.GET.get('acao') or 'cadastrar'
@@ -60,6 +63,7 @@ def gerenciar_estoque(request):
     return render(request, 'estoque/gerenciar.html', contexto)
 
 
+@login_required
 def consultar_estoque(request):
     contexto = {'produtos': Produto.objects.all()}
     return render(request, 'estoque/consultar.html', contexto)
