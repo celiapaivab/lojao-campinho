@@ -10,9 +10,10 @@ Projeto individual da disciplina de Desenvolvimento de Software.
 
 - Python 3.12
 - Django 5.2 LTS
-- SQLite (banco de dados padrão do Django)
+- SQLite no desenvolvimento local e PostgreSQL em produção (Render)
 - Django Templates, HTML5 e CSS3
 - Arquitetura monolítica no padrão MVT (Model-View-Template) do Django
+- Gunicorn e WhiteNoise para rodar o site em produção
 
 ## Estrutura do projeto
 
@@ -21,7 +22,9 @@ lojao-do-campinho/
 ├── lojao_campinho/   # Configurações do projeto (settings.py, urls.py)
 ├── estoque/          # App responsável pelo controle de estoque
 ├── manage.py         # Utilitário de linha de comando do Django
-└── requirements.txt  # Dependências do projeto
+├── requirements.txt  # Dependências do projeto
+├── build.sh          # Comandos de build usados pelo Render
+└── render.yaml       # Configuração do site e do banco no Render (Blueprint)
 ```
 
 ## Como rodar o projeto localmente
@@ -137,7 +140,67 @@ Em produção, defina estas variáveis de ambiente:
 | `DJANGO_SECRET_KEY` | uma chave longa e aleatória | Chave secreta (obrigatória quando `DJANGO_DEBUG=False`) |
 | `DJANGO_DEBUG` | `False` | Desliga o modo de depuração |
 | `DJANGO_ALLOWED_HOSTS` | `loja.com.br` | Endereços em que o site pode ser acessado |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://loja.com.br` | Endereços HTTPS de onde os formulários podem ser enviados |
+| `DATABASE_URL` | `postgresql://usuario:senha@servidor:5432/banco` | Banco de dados de produção (sem ela, o projeto usa o SQLite) |
 
 Com `DJANGO_DEBUG=False`, os cookies de sessão e CSRF passam a ser enviados
 apenas por HTTPS. Antes de publicar, rode `python manage.py check --deploy`
 para ver as recomendações de segurança do Django.
+
+No Render, o endereço `*.onrender.com` do site é adicionado automaticamente a
+`ALLOWED_HOSTS` e `CSRF_TRUSTED_ORIGINS` (pela variável `RENDER_EXTERNAL_HOSTNAME`).
+Só é preciso preencher essas duas variáveis se você usar um domínio próprio.
+
+## Deploy no Render
+
+O projeto já vem preparado para o [Render](https://render.com), usando os planos
+gratuitos para o site e para o banco PostgreSQL. Nenhuma senha fica no código:
+todas as informações secretas são guardadas no painel do Render.
+
+### O que o Render executa
+
+| Etapa | Comando |
+|---|---|
+| Build | `./build.sh` (instala as dependências, roda `collectstatic`, `migrate` e cria o administrador) |
+| Start | `gunicorn lojao_campinho.wsgi:application` |
+
+A versão do Python (3.12) vem do arquivo `.python-version`.
+
+### Passo a passo
+
+1. Crie uma conta gratuita em <https://render.com> e conecte sua conta do GitHub.
+2. No painel, clique em **New → Blueprint** e escolha o repositório `lojao-campinho`.
+3. O Render lê o arquivo `render.yaml` e mostra o que será criado:
+   - um banco **PostgreSQL** gratuito (`lojao-campinho-db`);
+   - um **Web Service** gratuito (`lojao-campinho`).
+4. Preencha as variáveis pedidas para a conta do dono da loja:
+   - `DJANGO_SUPERUSER_USERNAME`: o nome de usuário;
+   - `DJANGO_SUPERUSER_EMAIL`: um e-mail;
+   - `DJANGO_SUPERUSER_PASSWORD`: uma senha forte (não use a mesma de outros sites).
+5. Clique em **Apply** (ou **Deploy Blueprint**) e acompanhe os **Logs** até aparecer
+   que o deploy terminou (*Your service is live*).
+
+As outras variáveis são preenchidas pelo próprio Render:
+
+| Variável | De onde vem |
+|---|---|
+| `DATABASE_URL` | Conexão com o banco `lojao-campinho-db` |
+| `DJANGO_SECRET_KEY` | Gerada automaticamente (`generateValue`) |
+| `DJANGO_DEBUG` | `False`, definido no `render.yaml` |
+
+### Endereço público do site
+
+Depois do deploy, abra o serviço **lojao-campinho** no painel do Render. O endereço
+público aparece no topo da página, no formato `https://lojao-campinho.onrender.com`
+(o Render pode acrescentar letras ao nome se ele já estiver em uso). Abra esse
+endereço e entre com o usuário e a senha definidos no passo 4.
+
+### Observações sobre o plano gratuito
+
+- O site "dorme" depois de alguns minutos sem acesso. O primeiro acesso depois
+  disso pode demorar cerca de um minuto.
+- O banco PostgreSQL gratuito do Render tem prazo de validade e limite de espaço.
+  Confira as regras atuais do plano gratuito no site do Render antes de usar com
+  dados reais.
+- A senha do administrador só é usada no primeiro deploy. Para trocá-la depois,
+  use o painel `/admin/` do site.

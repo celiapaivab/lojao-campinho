@@ -16,6 +16,7 @@ env/
 # Django
 *.log
 /static_collected/
+/staticfiles/
 /media/
 
 # Banco de dados SQLite
