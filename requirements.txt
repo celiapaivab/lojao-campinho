@@ -1,1 +1,7 @@
 Django==5.2.19
+
+# Produção (Render)
+gunicorn==27.0.1            # Servidor web que roda o Django em produção
+whitenoise==6.12.0          # Entrega os arquivos estáticos (CSS)
+dj-database-url==3.1.2      # Lê o banco de dados da variável DATABASE_URL
+psycopg[binary]==3.3.9      # Conexão com o PostgreSQL

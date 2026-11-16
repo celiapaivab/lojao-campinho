@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -39,6 +40,19 @@ ALLOWED_HOSTS = [
     host for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if host
 ]
 
+# Endereços HTTPS de onde os formulários (POST) podem ser enviados em produção.
+# Ex.: DJANGO_CSRF_TRUSTED_ORIGINS="https://loja.com.br"
+CSRF_TRUSTED_ORIGINS = [
+    origem for origem in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if origem
+]
+
+# No Render, o endereço público do site (ex.: lojao-campinho.onrender.com)
+# vem na variável RENDER_EXTERNAL_HOSTNAME, definida automaticamente.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
+
 
 # Application definition
 
@@ -55,6 +69,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise entrega os arquivos estáticos (CSS) em produção.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -88,11 +104,15 @@ WSGI_APPLICATION = 'lojao_campinho.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Desenvolvimento: SQLite (arquivo db.sqlite3), sem nenhuma configuração.
+# Produção: PostgreSQL, informado pela variável de ambiente DATABASE_URL
+# (ex.: postgresql://usuario:senha@servidor:5432/banco). Nunca escreva essa URL no código.
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
@@ -132,6 +152,22 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Pasta onde o comando "collectstatic" junta os arquivos estáticos para produção.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        # Guarda os arquivos estáticos também compactados (mais rápidos de baixar).
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
+
+# No desenvolvimento, o WhiteNoise procura os arquivos na hora (sem collectstatic).
+WHITENOISE_AUTOREFRESH = DEBUG
+
 # Autenticação (sistema de login padrão do Django)
 LOGIN_URL = 'login'                     # Para onde vai quem não está logado
 LOGIN_REDIRECT_URL = 'estoque:inicio'   # Para onde vai após o login
@@ -146,6 +182,9 @@ if not DEBUG:
         )
     SESSION_COOKIE_SECURE = True  # Cookie de sessão enviado só por HTTPS
     CSRF_COOKIE_SECURE = True     # Cookie CSRF enviado só por HTTPS
+    # O Render recebe o HTTPS e repassa a requisição ao Django; este cabeçalho
+    # informa ao Django que a conexão original era segura.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Default primary key field type

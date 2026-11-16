@@ -1,0 +1,35 @@
+# Blueprint do Render: descreve o site e o banco de dados do Lojão do Campinho.
+# Uso: Render Dashboard > New > Blueprint > escolher este repositório.
+# Nenhuma senha ou chave fica neste arquivo.
+
+databases:
+  - name: lojao-campinho-db
+    plan: free
+    databaseName: lojao_campinho
+    user: lojao_campinho
+
+services:
+  - type: web
+    name: lojao-campinho
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: gunicorn lojao_campinho.wsgi:application
+    envVars:
+      # Conexão com o PostgreSQL acima (preenchida automaticamente pelo Render).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lojao-campinho-db
+          property: connectionString
+      # Chave secreta gerada automaticamente pelo Render.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      # Conta do dono da loja: valores digitados no painel do Render (sync: false).
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
