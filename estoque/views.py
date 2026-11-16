@@ -65,7 +65,19 @@ def gerenciar_estoque(request):
 
 @login_required
 def consultar_estoque(request):
-    contexto = {'produtos': Produto.objects.all()}
+    produtos = Produto.objects.all()
+
+    # Filtro "Somente estoque baixo": endereço /consultar/?filtro=baixo
+    somente_estoque_baixo = request.GET.get('filtro') == 'baixo'
+    if somente_estoque_baixo:
+        # Mesma regra da propriedade Produto.estoque_baixo (5 unidades ou menos).
+        produtos = produtos.filter(quantidade_estoque__lte=Produto.LIMITE_ESTOQUE_BAIXO)
+
+    contexto = {
+        'produtos': produtos,
+        'somente_estoque_baixo': somente_estoque_baixo,
+        'existem_produtos': Produto.objects.exists(),
+    }
     return render(request, 'estoque/consultar.html', contexto)
 
 

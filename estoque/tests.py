@@ -578,3 +578,34 @@ class ProtecaoCsrfTests(TestCase):
         })
         self.assertEqual(resposta.status_code, 302)
         self.assertTrue(Produto.objects.filter(nome='Cola').exists())
+
+
+class FiltroEstoqueBaixoTests(TesteComUsuarioLogado):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('estoque:consultar')
+        cadastrar_produto(nome='Apontador', categoria='Escrita', preco=Decimal('3.50'), quantidade_estoque=5)
+        cadastrar_produto(nome='Borracha', categoria='Escrita', preco=Decimal('2.00'), quantidade_estoque=6)
+        cadastrar_produto(nome='Cola', categoria='Escrita', preco=Decimal('4.25'), quantidade_estoque=0)
+
+    def nomes_na_tabela(self, resposta):
+        return [produto.nome for produto in resposta.context['produtos']]
+
+    def test_filtro_mostra_somente_estoque_baixo(self):
+        resposta = self.client.get(self.url + '?filtro=baixo')
+        self.assertEqual(resposta.status_code, 200)
+        # 5 e 0 unidades entram; 6 unidades fica de fora.
+        self.assertEqual(self.nomes_na_tabela(resposta), ['Apontador', 'Cola'])
+        self.assertNotContains(resposta, 'Borracha')
+        self.assertNotContains(resposta, 'Em estoque')
+
+    def test_sem_filtro_mostra_todos_os_produtos(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(self.nomes_na_tabela(resposta), ['Apontador', 'Borracha', 'Cola'])
+        self.assertContains(resposta, 'Somente estoque baixo')
+
+    def test_filtro_sem_resultados_mostra_mensagem(self):
+        Produto.objects.filter(quantidade_estoque__lte=5).update(quantidade_estoque=20)
+        resposta = self.client.get(self.url + '?filtro=baixo')
+        self.assertContains(resposta, 'Nenhum produto com estoque baixo.')
+        self.assertNotContains(resposta, '<table')
